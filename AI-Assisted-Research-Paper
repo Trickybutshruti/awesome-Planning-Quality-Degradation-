@@ -1,0 +1,237 @@
+Planning-Quality Degradation in Long-Horizon Autonomous 
+Research Agents 
+Abstract 
+Large language models (LLMs) have developed from passive text generators into increasingly autonomous 
+agents capable of browsing the web, invoking software tools, maintaining memory, decomposing objectives, 
+and executing multi-step workflows. These capabilities are particularly promising for autonomous research 
+agents, whose tasks may involve discovering literature, formulating search strategies, collecting evidence, 
+reconciling conflicting sources, synthesizing findings, and producing a defensible research report. However, 
+performance that is strong on individual reasoning steps does not necessarily translate into reliable 
+performance over long horizons. This paper examines planning-quality degradation: the systematic 
+deterioration of an agent's ability to maintain coherent, evidence-grounded, goal-directed plans as the number 
+of interdependent actions increases. 
+The paper synthesizes research on LLM planning, tool use, reasoning-and-acting, reflection, memory, long
+context processing, autonomous-agent benchmarks, and web-based research. Existing evidence indicates 
+several interacting degradation mechanisms: local or myopic decision-making, error propagation, context 
+overload, imperfect memory retrieval, goal drift, unreliable tool selection, premature commitment, weak 
+verification, and vulnerability to environmental perturbations. Benchmarks such as WebArena, AgentBench, 
+GAIA, BrowseComp, and τ-bench demonstrate that realistic multi-step tasks remain substantially more 
+difficult than isolated question answering. Approaches including ReAct, Tree of Thoughts, LLM+P, 
+Reflexion, skill libraries, external memory, and structured research workflows mitigate individual failure 
+modes but do not yet provide a unified solution. 
+The paper argues that future autonomous research systems should treat planning as a continuously evaluated 
+process rather than a one-time decomposition of a user objective. Promising directions include hierarchical 
+and adaptive planning, explicit state representations, plan-quality estimators, uncertainty-aware search, 
+evidence provenance graphs, execution checkpoints, selective replanning, and evaluation metrics that 
+measure degradation as a function of horizon length. A central research challenge is therefore not merely 
+increasing model intelligence, but developing agent architectures whose planning quality remains stable as 
+tasks become longer, more uncertain, and more dynamically interactive. 
+Keywords: autonomous agents; large language models; long-horizon planning; planning quality; research 
+agents; tool use; memory; reasoning; agent evaluation; information retrieval 
+1. Introduction 
+The emergence of large language model (LLM)-based autonomous agents has changed the scope of 
+machine-assisted problem solving. Rather than producing an answer from a single prompt, an agent can now 
+formulate intermediate objectives, search external information, invoke tools, inspect their outputs, revise its 
+approach, and execute actions over an extended trajectory. Surveys of LLM-based autonomous agents 
+describe this development as a transition from conventional language generation toward systems capable of 
+perception, reasoning, planning, action, and feedback-driven adaptation (Wang et al., 2023; Huang et al., 
+2024). 
+Autonomous research is a particularly demanding application. A research task rarely consists of one 
+information-retrieval operation. Instead, an agent may need to interpret a broad research question, identify 
+subquestions, locate authoritative sources, distinguish primary from secondary evidence, compare competing 
+Page 1 
+findings, resolve contradictions, maintain citations, and synthesize the evidence into a coherent conclusion. 
+The resulting workflow is both long-horizon and state-dependent: later decisions depend on what was 
+discovered earlier, while early mistakes can constrain the quality of all subsequent steps. 
+This creates an important distinction between reasoning quality at a single step and planning quality across a 
+trajectory. An LLM may correctly reason about an individual document yet choose an ineffective search 
+query. It may retrieve an appropriate source but fail to remember why that source was relevant several steps 
+later. It may generate a plausible intermediate conclusion and then unconsciously use that conclusion to bias 
+subsequent searches. Thus, an agent can exhibit high local competence while producing a globally poor 
+research process. 
+This phenomenon is referred to in this paper as planning-quality degradation (PQD). PQD is defined as the 
+decline in the quality, coherence, relevance, efficiency, or reliability of an agent's planned behavior as the 
+temporal horizon and dependency structure of a task increase. The concept is broader than ordinary 
+execution failure. An execution failure occurs when an action does not achieve its intended effect; planning 
+degradation occurs when the agent's representation of what should be done next and why becomes 
+progressively less aligned with the overall objective. 
+Several findings motivate this perspective. AgentBench identified poor long-term reasoning, decision
+making, and instruction following as important obstacles for usable LLM agents across multiple interactive 
+environments (Liu et al., 2024). WebArena demonstrated that realistic web tasks involving multiple 
+interactions remain difficult even for powerful models; its reported GPT-4-based baseline achieved only 
+14.41% end-to-end success compared with 78.24% human performance (Zhou et al., 2024). Similarly, GAIA 
+showed a large gap between human performance and GPT-4 with plugins on real-world assistant tasks 
+requiring reasoning, browsing, multimodality, and tool use (Mialon et al., 2024). 
+The central argument of this paper is that long-horizon autonomous research should be understood as a 
+planning stability problem as much as a reasoning problem. Increasing model scale or context length can 
+improve individual capabilities, but these improvements do not automatically guarantee stable planning over 
+hundreds of dependent actions. Indeed, research on long-context language modeling has shown that simply 
+providing a model with more context does not ensure that it will reliably use all relevant information (Liu et 
+al., 2024). 
+2. Background and Related Work 
+Traditional autonomous-agent research conceptualizes an agent as a system that observes an environment, 
+maintains a state representation, selects actions, and seeks to maximize an objective. LLM agents retain this 
+basic structure but replace or augment conventional symbolic planners, policies, or controllers with a 
+language model capable of interpreting natural-language objectives and generating actions. 
+Wang et al. (2023) provide a broad survey of LLM-based autonomous agents and identify recurring 
+components including profiling, memory, planning, action generation, and interaction with environments. 
+Huang et al. (2024) specifically organize LLM-agent planning research around task decomposition, plan 
+selection, external modules, reflection, and memory. ReAct interleaves reasoning and external actions, while 
+Toolformer and WebGPT demonstrate the value of tool use and browser interaction (Yao et al., 2023; Schick 
+et al., 2023; Nakano et al., 2022). 
+Tree of Thoughts (Yao et al., 2023) extends sequential reasoning by allowing multiple candidate reasoning 
+paths, evaluation, and backtracking. LLM+P (Liu et al., 2023) instead delegates formal planning to classical 
+planners after translating natural-language objectives into PDDL. These approaches establish that language 
+competence and planning competence are related but distinguishable capabilities. 
+Page 2 
+Reflexion (Shinn et al., 2023) introduces verbal reinforcement learning in which feedback from unsuccessful 
+attempts is stored in an episodic memory buffer. Such memory is particularly important for long-horizon 
+research, but memory can itself become a source of degradation when irrelevant or incorrect information is 
+retrieved or when important evidence is buried in a large context. 
+3. Planning-Quality Degradation in Long-Horizon Research 
+Planning quality is multidimensional. For a research trajectory T=(a_1,…,a_H) of horizon H, it can be 
+conceptualized as Q(T)=αC+βE+γR+δV−λK, where C represents coherence with the global research 
+objective, E evidence quality and coverage, R relevance, V verification and factual reliability, and K 
+unnecessary cost. 
+Several interacting mechanisms cause degradation. First, myopic decision-making can favor actions with 
+high immediate utility over actions that improve the overall research trajectory. Recent planning-centric 
+work argues that step-wise reasoning can behave like a greedy policy as the horizon increases (Wang et al., 
+2026). 
+Second, errors compound. Under a simplified independence assumption, if every dependent step has 
+correctness probability p, then P(success)=p^H. Even small per-step weaknesses can therefore become severe 
+over long trajectories. 
+Third, context overload can produce effective state loss. Liu et al. (2024) documented the “lost in the 
+middle” phenomenon, showing that models may fail to use relevant information reliably when it is embedded 
+in long contexts. For research agents, this can result in repeated searches, contradictory summaries, or 
+excessive dependence on recent information. 
+Fourth, goal drift can occur when early search results, intermediate conclusions, memory summaries, or tool 
+affordances progressively narrow the agent's interpretation of the original research objective. Fifth, tool use 
+enlarges the action space and introduces new failure modes. AgentDojo demonstrates that tool-mediated 
+environments can expose agents to prompt injection and other security problems (Debenedetti et al., 2024). 
+Finally, premature commitment can cause a research agent to select a hypothesis or evidence path before 
+sufficient evidence has been collected. Search-based methods such as Tree of Thoughts mitigate this by 
+preserving multiple candidate trajectories. 
+4. Current Approaches and Developments 
+Current mitigation strategies include receding-horizon planning, hierarchical planning, search-based 
+deliberation, external planners, reflection, persistent memory, and improved evaluation environments. 
+Receding-horizon approaches avoid generating extremely long plans in advance. The agent executes a short 
+sequence, observes the environment, and replans. ReAct follows a related principle by interleaving reasoning 
+and action. Hierarchical planning decomposes a global objective into research questions, evidence categories, 
+and concrete retrieval or verification operations. 
+Search-based deliberation allows multiple candidate plans to be explored and evaluated. LLM+P 
+demonstrates that classical planners can provide strong formal planning capabilities when connected to 
+language models. Reflexion provides a mechanism for learning from previous failures, while Voyager 
+demonstrates the potential of persistent executable skill libraries. 
+Evaluation has also advanced. WebArena evaluates realistic multi-site web tasks; AgentBench evaluates 
+agents across multiple interactive environments; GAIA focuses on general assistant tasks requiring 
+reasoning, multimodality, browsing, and tools. BrowseComp emphasizes persistent browsing and difficult 
+Page 3 
+information discovery, while τ-bench evaluates dynamic tool-agent-user interaction and exposes variability 
+across repeated trials. 
+5. Research Challenges and Limitations 
+A major limitation of current evaluation is its focus on final task success rather than the trajectory. A stronger 
+evaluation should measure goal alignment, evidence coverage, source authority, redundancy, plan revisions, 
+contradiction rate, memory retrieval, tool selection, and recovery time throughout the task. 
+Failure attribution is another challenge because retrieval, reasoning, planning, memory, tool execution, and 
+verification errors are often entangled. Long-horizon research also requires uncertainty calibration: an agent 
+should explicitly distinguish known, supported, uncertain, and contradictory claims. 
+Research environments are dynamic and potentially adversarial. Web pages change, APIs fail, documents 
+disappear, and retrieved content can contain misleading instructions. Long-horizon deliberation is also 
+computationally expensive because search, reflection, verification, and repeated model calls increase latency 
+and cost. 
+Finally, benchmark contamination remains a concern because web-based benchmark information can enter 
+training corpora. Dynamic tasks, held-out sources, temporal splits, and procedurally generated research 
+questions can help distinguish genuine research ability from memorization. 
+6. Research Gaps and Future Directions 
+The field lacks a unified theory of planning-quality degradation in LLM agents. Future work should model 
+planning quality as a function of horizon, uncertainty, branching factor, memory load, and environmental 
+volatility. 
+Horizon-adaptive planning is promising: agents could allocate deeper planning to decisions with high 
+uncertainty or downstream impact while handling routine decisions cheaply. Evidence-centric planning could 
+represent claims, sources, datasets, methods, and observations in an evidence graph whose edges encode 
+support, contradiction, derivation, and verification requirements. 
+Memory should become provenance-aware, preserving the source, evidence location, context, confidence, 
+and date associated with each stored claim. Independent plan critics and verification modules could reduce 
+the weakness of self-criticism by separating planning from evaluation. 
+Research-specific benchmarks should require agents to formulate a plan, search heterogeneous scholarly 
+sources, distinguish primary and secondary evidence, reconcile contradictions, maintain citation provenance, 
+revise hypotheses, and justify evidence sufficiency. Evaluation should score the entire trajectory and include 
+repeated trials so that both mean performance and variance are measured. 
+Finally, human-in-the-loop checkpoints can be introduced at high-impact decisions such as research-question 
+interpretation, hypothesis selection, evidence sufficiency, and final synthesis. The objective is not to 
+eliminate autonomy but to allocate oversight where planning failure would be most costly. 
+7. Conclusion 
+Long-horizon autonomous research exposes a fundamental limitation of current LLM-agent systems: strong 
+local reasoning does not guarantee stable global planning. As an agent performs more actions, it must 
+continually preserve its objectives, retrieve relevant memory, evaluate evidence, select appropriate tools, 
+detect errors, revise hypotheses, and decide whether its current plan remains valid. 
+Page 4 
+The literature provides strong evidence for individual components of this problem. ReAct demonstrates the 
+value of grounding reasoning in environmental feedback; Tree of Thoughts shows the benefits of explicit 
+search and backtracking; LLM+P demonstrates the value of delegating planning to formal planners; 
+Reflexion illustrates how feedback and memory can improve future behavior; and Voyager demonstrates the 
+potential of persistent skill libraries. 
+The central research challenge is therefore not simply to make models reason better. It is to construct systems 
+whose planning quality remains stable as the horizon grows. This requires explicit state representations, 
+adaptive planning depth, evidence-aware memory, reliable verification, uncertainty calibration, selective 
+replanning, and evaluation methods that expose degradation throughout a trajectory. 
+For autonomous research agents, the ultimate standard should be more demanding than producing a plausible 
+final report. A trustworthy system should demonstrate that its research trajectory remained aligned with the 
+original question, that important evidence was neither lost nor selectively ignored, that contradictory findings 
+triggered appropriate replanning, and that conclusions can be traced to verifiable sources. 
+References 
+1. Debenedetti, E., Zhang, J., Balunović, M., Beurer-Kellner, L., Fischer, M., & Tramèr, F. (2024). AgentDojo: A 
+Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents. Advances in 
+Neural Information Processing Systems (NeurIPS 2024), 37. DOI: 10.52202/079017-2636. 
+2. Huang, X., Liu, W., Chen, X., Wang, X., Wang, H., Lian, D., Wang, Y., Tang, R., & Chen, E. (2024). 
+Understanding the Planning of LLM Agents: A Survey. arXiv:2402.02716. DOI: 10.48550/arXiv.2402.02716. 
+3. Liu, B., Jiang, Y., Zhang, X., Liu, Q., Zhang, S., Biswas, J., & Stone, P. (2023). LLM+P: Empowering Large 
+Language Models with Optimal Planning Proficiency. arXiv:2304.11477. DOI: 10.48550/arXiv.2304.11477. 
+4. Liu, N. F., Lin, K., Hewitt, J., Paranjape, A., Bevilacqua, M., Petroni, F., & Liang, P. (2024). Lost in the 
+Middle: How Language Models Use Long Contexts. Transactions of the Association for Computational 
+Linguistics, 12, 157–173. DOI: 10.1162/tacl_a_00638. arXiv:2307.03172. 
+5. Liu, X., Yu, H., Zhang, H., Xu, Y., Lei, X., Lai, H., Gu, Y., Ding, H., Men, K., Yang, K., Zhang, S., Deng, X., 
+Zeng, A., Du, Z., Zhang, C., Shen, S., Zhang, T., Su, Y., Sun, H., Huang, M., Dong, Y., & Tang, J. (2024). 
+AgentBench: Evaluating LLMs as Agents. International Conference on Learning Representations (ICLR 
+2024). arXiv:2308.03688. 
+6. Mialon, G., Fourrier, C., Swift, C., Wolf, T., LeCun, Y., & Scialom, T. (2024). GAIA: A Benchmark for 
+General AI Assistants. International Conference on Learning Representations (ICLR 2024). 
+arXiv:2311.12983. 
+7. Nakano, R., Hilton, J., Balaji, S., Wu, J., Ouyang, L., Kim, C., Hesse, C., Jain, S., Kosaraju, V., Saunders, W., 
+Jiang, X., Cobbe, K., Eloundou, T., Krueger, G., Button, K., Knight, M., Chess, B., & Schulman, J. (2022). 
+WebGPT: Browser-Assisted Question-Answering with Human Feedback. arXiv:2112.09332. 
+8. Schick, T., Dwivedi-Yu, J., Dessì, R., Raileanu, R., Lomeli, M., Zettlemoyer, L., Cancedda, N., & Scialom, T. 
+(2023). Toolformer: Language Models Can Teach Themselves to Use Tools. Advances in Neural Information 
+Processing Systems (NeurIPS 2023). arXiv:2302.04761. 
+9. Shinn, N., Cassano, F., Gopinath, A., Narasimhan, K., & Yao, S. (2023). Reflexion: Language Agents with 
+Verbal Reinforcement Learning. Advances in Neural Information Processing Systems (NeurIPS 2023), 36. 
+arXiv:2303.11366. DOI: 10.48550/arXiv.2303.11366. 
+10. Wang, G., Xie, Y., Jiang, Y., Mandlekar, A., Xiao, C., Zhu, Y., Fan, L., & Anandkumar, A. (2024). Voyager: 
+An Open-Ended Embodied Agent with Large Language Models. Transactions on Machine Learning 
+Research. arXiv:2305.16291. 
+Page 5 
+11. Wang, L., Ma, C., Feng, X., Zhang, Z., Yang, H., Zhang, J., Chen, Z., Tang, J., Chen, X., Lin, Y., Zhao, W. 
+X., Wei, Z., & Wen, J.-R. (2023). A Survey on Large Language Model based Autonomous Agents. 
+arXiv:2308.11432. DOI: 10.48550/arXiv.2308.11432. 
+12. Wang, Z., Wu, F., Wang, H., Tang, X., Li, B., Yin, Z., Ma, Y., Li, Y., Sun, W., Chen, X., & Ye, Y. (2026). 
+Why Reasoning Fails to Plan: A Planning-Centric Analysis of Long-Horizon Decision Making in LLM 
+Agents. arXiv:2601.22311. 
+13. Wei, J., Sun, Z., Papay, S., McKinney, S., Han, J., Fulford, I., Chung, H. W., Tachard Passos, A., Fedus, W., 
+& Glaese, A. (2025). BrowseComp: A Simple Yet Challenging Benchmark for Browsing Agents. 
+arXiv:2504.12516. 
+14. Yao, S., Zhao, J., Yu, D., Du, N., Shafran, I., Narasimhan, K., & Cao, Y. (2023). ReAct: Synergizing 
+Reasoning and Acting in Language Models. International Conference on Learning Representations (ICLR 
+2023). arXiv:2210.03629. DOI: 10.48550/arXiv.2210.03629. 
+15. Yao, S., Yu, D., Zhao, J., Shafran, I., Griffiths, T. L., Cao, Y., & Narasimhan, K. (2023). Tree of Thoughts: 
+Deliberate Problem Solving with Large Language Models. Advances in Neural Information Processing 
+Systems (NeurIPS 2023), 36. DOI: 10.52202/075280-0517. arXiv:2305.10601. 
+16. Yao, S., Shinn, N., Razavi, P., & Narasimhan, K. (2025). τ-Bench: A Benchmark for Tool-Agent-User 
+Interaction in Real-World Domains. International Conference on Learning Representations (ICLR 2025). 
+arXiv:2406.12045. 
+17. Zhou, S., Xu, F. F., Zhu, H., Zhou, X., Lo, R., Sridhar, A., Cheng, X., Ou, T., Bisk, Y., Fried, D., Alon, U., & 
+Neubig, G. (2024). WebArena: A Realistic Web Environment for Building Autonomous Agents. International 
+Conference on Learning Representations (ICLR 2024). arXiv:2307.13854. 
+18. Jimenez, C. E., Yang, J., Wettig, A., Yao, S., Pei, K., Press, O., & Narasimhan, K. (2024). SWE-bench: Can 
+Language Models Resolve Real-World GitHub Issues? International Conference on Learning Representations 
+(ICLR 2024). arXiv:2310.06770. 
+Page 6 
